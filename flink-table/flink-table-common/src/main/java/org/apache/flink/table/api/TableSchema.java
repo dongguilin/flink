@@ -22,12 +22,15 @@ import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.common.typeutils.CompositeType;
 import org.apache.flink.table.types.DataType;
+import org.apache.flink.table.types.logical.LogicalType;
+import org.apache.flink.table.types.logical.LogicalTypeRoot;
 import org.apache.flink.table.types.utils.TypeConversions;
 import org.apache.flink.types.Row;
 import org.apache.flink.util.Preconditions;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -56,9 +59,12 @@ public class TableSchema {
 
 	private final Map<String, Integer> fieldNameToIndex;
 
-	private TableSchema(String[] fieldNames, DataType[] fieldDataTypes) {
+	private final List<WatermarkSpec> watermarkSpecs;
+
+	private TableSchema(String[] fieldNames, DataType[] fieldDataTypes, List<WatermarkSpec> watermarkSpecs) {
 		this.fieldNames = Preconditions.checkNotNull(fieldNames);
 		this.fieldDataTypes = Preconditions.checkNotNull(fieldDataTypes);
+		this.watermarkSpecs = Preconditions.checkNotNull(watermarkSpecs);
 
 		if (fieldNames.length != fieldDataTypes.length) {
 			throw new TableException(
@@ -100,14 +106,14 @@ public class TableSchema {
 	 */
 	@Deprecated
 	public TableSchema(String[] fieldNames, TypeInformation<?>[] fieldTypes) {
-		this(fieldNames, fromLegacyInfoToDataType(fieldTypes));
+		this(fieldNames, fromLegacyInfoToDataType(fieldTypes), Collections.emptyList());
 	}
 
 	/**
 	 * Returns a deep copy of the table schema.
 	 */
 	public TableSchema copy() {
-		return new TableSchema(fieldNames.clone(), fieldDataTypes.clone());
+		return new TableSchema(fieldNames.clone(), fieldDataTypes.clone(), new ArrayList<>(watermarkSpecs));
 	}
 
 	/**
@@ -177,6 +183,18 @@ public class TableSchema {
 	public Optional<TypeInformation<?>> getFieldType(String fieldName) {
 		return getFieldDataType(fieldName)
 			.map(TypeConversions::fromDataTypeToLegacyInfo);
+	}
+
+	/**
+	 * Returns a list of the watermark specification which contains rowtime attribute and watermark
+	 * strategy expression.
+	 *
+	 * <p>NOTE: Currently, there is at most one {@link WatermarkSpec} in the list, because we don't
+	 * support multiple watermarks definition yet. But in the future, we may support multiple
+	 * watermarks.
+	 */
+	public List<WatermarkSpec> getWatermarkSpecs() {
+		return watermarkSpecs;
 	}
 
 	/**
@@ -299,9 +317,12 @@ public class TableSchema {
 
 		private List<DataType> fieldDataTypes;
 
+		private final List<WatermarkSpec> watermarkSpecs;
+
 		public Builder() {
 			fieldNames = new ArrayList<>();
 			fieldDataTypes = new ArrayList<>();
+			watermarkSpecs = new ArrayList<>();
 		}
 
 		/**
@@ -343,13 +364,92 @@ public class TableSchema {
 			return field(name, fromLegacyInfoToDataType(typeInfo));
 		}
 
+		public Builder watermark(
+			String rowtimeAttribute,
+			String watermarkExpressionString,
+			DataType watermarkExprOutputType) {
+			Preconditions.checkNotNull(rowtimeAttribute);
+			Preconditions.checkNotNull(watermarkExpressionString);
+			Preconditions.checkNotNull(watermarkExprOutputType);
+			if (!this.watermarkSpecs.isEmpty()) {
+				throw new IllegalStateException(
+					"Multiple watermark definition is not supported yet.");
+			}
+			this.watermarkSpecs.add(
+				new WatermarkSpec(
+					rowtimeAttribute, watermarkExpressionString, watermarkExprOutputType));
+			return this;
+		}
+
+		/** Adds the given {@link WatermarkSpec} to this builder. */
+		public Builder watermark(WatermarkSpec watermarkSpec) {
+			if (!this.watermarkSpecs.isEmpty()) {
+				throw new IllegalStateException(
+					"Multiple watermark definition is not supported yet.");
+			}
+			this.watermarkSpecs.add(watermarkSpec);
+			return this;
+		}
+
 		/**
 		 * Returns a {@link TableSchema} instance.
 		 */
 		public TableSchema build() {
+			validateWatermarkSpecs(fieldNames, fieldDataTypes, watermarkSpecs);
 			return new TableSchema(
 				fieldNames.toArray(new String[0]),
-				fieldDataTypes.toArray(new DataType[0]));
+				fieldDataTypes.toArray(new DataType[0]),
+				watermarkSpecs);
 		}
+	}
+
+	/**
+	 * Table column and watermark specification sanity check.
+	 */
+	private static void validateWatermarkSpecs(List<String> names, List<DataType> dataTypes, List<WatermarkSpec> watermarkSpecs) {
+		final Map<String, LogicalType> fieldNameToType = new HashMap<>();
+		for (int i = 0; i < names.size(); i++) {
+			String name = names.get(i);
+			DataType dataType = dataTypes.get(i);
+			fieldNameToType.put(name, dataType.getLogicalType());
+		}
+
+		// Validate watermark and rowtime attribute.
+		for (WatermarkSpec watermark : watermarkSpecs) {
+			String rowtimeAttribute = watermark.getRowtimeAttribute();
+			LogicalType rowtimeType =
+				Optional.ofNullable(fieldNameToType.get(rowtimeAttribute))
+					.orElseThrow(
+						() ->
+							new ValidationException(
+								String.format(
+									"Rowtime attribute '%s' is not defined in schema.",
+									rowtimeAttribute)));
+			if (!(rowtimeType.getTypeRoot() == LogicalTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE
+				|| rowtimeType.getTypeRoot() == LogicalTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE)) {
+				throw new ValidationException(
+					String.format(
+						"Rowtime attribute '%s' must be of type TIMESTAMP or TIMESTAMP_LTZ but is of type '%s'.",
+						rowtimeAttribute, rowtimeType));
+			}
+			LogicalType watermarkOutputType =
+				watermark.getWatermarkExprOutputType().getLogicalType();
+			if (!canBeTimeAttributeType(watermarkOutputType)) {
+				throw new ValidationException(
+					String.format(
+						"Watermark strategy %s must be of type TIMESTAMP or TIMESTAMP_LTZ but is of type '%s'.",
+						watermark.getWatermarkExpr(),
+						watermarkOutputType.asSummaryString()));
+			}
+		}
+	}
+
+	public static boolean canBeTimeAttributeType(LogicalType logicalType) {
+		LogicalTypeRoot typeRoot = logicalType.getTypeRoot();
+		if (typeRoot == LogicalTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE
+			|| typeRoot == LogicalTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
+			return true;
+		}
+		return false;
 	}
 }

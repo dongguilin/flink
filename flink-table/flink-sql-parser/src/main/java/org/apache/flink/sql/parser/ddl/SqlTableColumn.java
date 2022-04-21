@@ -18,8 +18,6 @@
 
 package org.apache.flink.sql.parser.ddl;
 
-import org.apache.flink.sql.parser.type.ExtendedSqlType;
-
 import org.apache.calcite.sql.SqlCall;
 import org.apache.calcite.sql.SqlCharStringLiteral;
 import org.apache.calcite.sql.SqlDataTypeSpec;
@@ -32,6 +30,7 @@ import org.apache.calcite.sql.SqlWriter;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.util.ImmutableNullableList;
 
+import javax.annotation.Nonnull;
 import java.util.List;
 
 import static java.util.Objects.requireNonNull;
@@ -43,9 +42,9 @@ public class SqlTableColumn extends SqlCall {
 	private static final SqlSpecialOperator OPERATOR =
 		new SqlSpecialOperator("COLUMN_DECL", SqlKind.COLUMN_DECL);
 
-	private SqlIdentifier name;
-	private SqlDataTypeSpec type;
-	private SqlCharStringLiteral comment;
+	protected SqlIdentifier name;
+	protected SqlDataTypeSpec type;
+	protected SqlCharStringLiteral comment;
 
 	public SqlTableColumn(SqlIdentifier name,
 			SqlDataTypeSpec type,
@@ -57,11 +56,15 @@ public class SqlTableColumn extends SqlCall {
 		this.comment = comment;
 	}
 
+	protected void unparseColumn(SqlWriter writer, int leftPrec, int rightPrec){
+	}
+
 	@Override
 	public SqlOperator getOperator() {
 		return OPERATOR;
 	}
 
+	@Nonnull
 	@Override
 	public List<SqlNode> getOperandList() {
 		return ImmutableNullableList.of(name, type, comment);
@@ -70,8 +73,9 @@ public class SqlTableColumn extends SqlCall {
 	@Override
 	public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
 		this.name.unparse(writer, leftPrec, rightPrec);
-		writer.print(" ");
-		ExtendedSqlType.unparseType(type, writer, leftPrec, rightPrec);
+
+		unparseColumn(writer, leftPrec, rightPrec);
+
 		if (this.comment != null) {
 			writer.print(" COMMENT ");
 			this.comment.unparse(writer, leftPrec, rightPrec);

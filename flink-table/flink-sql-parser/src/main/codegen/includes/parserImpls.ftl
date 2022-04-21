@@ -41,22 +41,52 @@ void TableColumn(TableCreationContext context) :
         UniqueKey(context.uniqueKeysList)
     |
         ComputedColumn(context)
+    |
+        Watermark(context)
     )
+}
+
+void Watermark(TableCreationContext context) :
+{
+    SqlIdentifier eventTimeColumnName;
+    SqlParserPos pos;
+    SqlNode watermarkStrategy;
+}
+{
+    <WATERMARK> {pos = getPos();} <FOR>
+    eventTimeColumnName = CompoundIdentifier()
+    <AS>
+    watermarkStrategy = Expression(ExprContext.ACCEPT_NON_QUERY) {
+        if (context.watermark != null) {
+            throw new ParseException("Multiple WATERMARK statements is not supported yet.");
+        } else {
+            context.watermark = new SqlWatermark(pos, eventTimeColumnName, watermarkStrategy);
+        }
+    }
 }
 
 void ComputedColumn(TableCreationContext context) :
 {
-    SqlNode identifier;
+    SqlIdentifier name;
     SqlNode expr;
-    boolean hidden = false;
     SqlParserPos pos;
+    SqlCharStringLiteral comment = null;
 }
 {
-    identifier = SimpleIdentifier() {pos = getPos();}
+    name = SimpleIdentifier() {pos = getPos();}
     <AS>
-    expr = Expression(ExprContext.ACCEPT_SUB_QUERY) {
-        expr = SqlStdOperatorTable.AS.createCall(Span.of(identifier, expr).pos(), expr, identifier);
-        context.columnList.add(expr);
+    expr = Expression(ExprContext.ACCEPT_NON_QUERY)
+    [ <COMMENT> <QUOTED_STRING> {
+        String p = SqlParserUtil.parseString(token.image);
+        comment = SqlLiteral.createCharString(p, getPos());
+    }]
+    {
+        SqlTableColumn computedColumn = new SqlComputedColumn(
+            getPos(),
+            name,
+            comment,
+            expr);
+        context.columnList.add(computedColumn);
     }
 }
 
@@ -76,7 +106,7 @@ void TableColumn2(List<SqlNode> list) :
         comment = SqlLiteral.createCharString(p, getPos());
     }]
     {
-        SqlTableColumn tableColumn = new SqlTableColumn(name, type, comment, getPos());
+        SqlTableColumn tableColumn = new SqlRegularColumn(name, type, comment, getPos());
         list.add(tableColumn);
     }
 }
@@ -161,6 +191,7 @@ SqlCreate SqlCreateTable(Span s, boolean replace) :
     SqlIdentifier tableName;
     SqlNodeList primaryKeyList = null;
     List<SqlNodeList> uniqueKeysList = null;
+    SqlWatermark watermark = null;
     SqlNodeList columnList = SqlNodeList.EMPTY;
 	SqlCharStringLiteral comment = null;
 
@@ -183,6 +214,7 @@ SqlCreate SqlCreateTable(Span s, boolean replace) :
             columnList = new SqlNodeList(ctx.columnList, pos);
             primaryKeyList = ctx.primaryKeyList;
             uniqueKeysList = ctx.uniqueKeysList;
+            watermark = ctx.watermark;
         }
         <RPAREN>
     ]
@@ -206,6 +238,7 @@ SqlCreate SqlCreateTable(Span s, boolean replace) :
                 uniqueKeysList,
                 propertyList,
                 partitionColumns,
+                watermark,
                 comment);
     }
 }

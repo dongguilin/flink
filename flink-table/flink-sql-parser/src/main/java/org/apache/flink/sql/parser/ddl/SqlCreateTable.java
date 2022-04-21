@@ -18,9 +18,6 @@
 
 package org.apache.flink.sql.parser.ddl;
 
-import org.apache.flink.sql.parser.ExtendedSqlNode;
-import org.apache.flink.sql.parser.error.SqlParseException;
-
 import org.apache.calcite.sql.SqlBasicCall;
 import org.apache.calcite.sql.SqlCall;
 import org.apache.calcite.sql.SqlCharStringLiteral;
@@ -36,10 +33,14 @@ import org.apache.calcite.sql.dialect.AnsiSqlDialect;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.pretty.SqlPrettyWriter;
 import org.apache.calcite.util.ImmutableNullableList;
+import org.apache.flink.sql.parser.ExtendedSqlNode;
+import org.apache.flink.sql.parser.error.SqlParseException;
 
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
@@ -63,6 +64,8 @@ public class SqlCreateTable extends SqlCreate implements ExtendedSqlNode {
 
 	private final SqlNodeList partitionKeyList;
 
+	private final SqlWatermark watermark;
+
 	private final SqlCharStringLiteral comment;
 
 	public SqlCreateTable(
@@ -73,6 +76,7 @@ public class SqlCreateTable extends SqlCreate implements ExtendedSqlNode {
 			List<SqlNodeList> uniqueKeysList,
 			SqlNodeList propertyList,
 			SqlNodeList partitionKeyList,
+			@Nullable SqlWatermark watermark,
 			SqlCharStringLiteral comment) {
 		super(OPERATOR, pos, false, false);
 		this.tableName = requireNonNull(tableName, "Table name is missing");
@@ -81,6 +85,7 @@ public class SqlCreateTable extends SqlCreate implements ExtendedSqlNode {
 		this.uniqueKeysList = uniqueKeysList;
 		this.propertyList = propertyList;
 		this.partitionKeyList = partitionKeyList;
+		this.watermark = watermark;
 		this.comment = comment;
 	}
 
@@ -92,7 +97,7 @@ public class SqlCreateTable extends SqlCreate implements ExtendedSqlNode {
 	@Override
 	public List<SqlNode> getOperandList() {
 		return ImmutableNullableList.of(tableName, columnList, primaryKeyList,
-			propertyList, partitionKeyList, comment);
+			propertyList, partitionKeyList, watermark, comment);
 	}
 
 	public SqlIdentifier getTableName() {
@@ -117,6 +122,10 @@ public class SqlCreateTable extends SqlCreate implements ExtendedSqlNode {
 
 	public List<SqlNodeList> getUniqueKeysList() {
 		return uniqueKeysList;
+	}
+
+	public Optional<SqlWatermark> getWatermark() {
+		return Optional.ofNullable(watermark);
 	}
 
 	public SqlCharStringLiteral getComment() {
@@ -183,6 +192,17 @@ public class SqlCreateTable extends SqlCreate implements ExtendedSqlNode {
 						"Partition column [" + partitionKey + "] not defined in columns, at "
 							+ partitionKeyNode.getParserPosition());
 				}
+			}
+		}
+
+		if (this.watermark != null) {
+			// SqlIdentifier.toString() returns a qualified identifier string using "." separator
+			String rowtimeField = watermark.getEventTimeColumnName().toString();
+			if (!columnNames.contains(rowtimeField)) {
+				throw new SqlParseException(
+					watermark.getEventTimeColumnName().getParserPosition(),
+					"The rowtime attribute field \"" + rowtimeField + "\" is not defined in columns, at " +
+						watermark.getEventTimeColumnName().getParserPosition());
 			}
 		}
 
@@ -271,6 +291,11 @@ public class SqlCreateTable extends SqlCreate implements ExtendedSqlNode {
 			}
 		}
 
+		if (watermark != null) {
+			printIndent(writer);
+			watermark.unparse(writer, leftPrec, rightPrec);
+		}
+
 		writer.newlineAndIndent();
 		writer.endList(frame);
 
@@ -314,6 +339,7 @@ public class SqlCreateTable extends SqlCreate implements ExtendedSqlNode {
 		public List<SqlNode> columnList = new ArrayList<>();
 		public SqlNodeList primaryKeyList;
 		public List<SqlNodeList> uniqueKeysList = new ArrayList<>();
+		@Nullable public SqlWatermark watermark;
 	}
 
 	public String[] fullTableName() {

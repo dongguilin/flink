@@ -25,6 +25,7 @@ import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.table.api.TableException;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.api.ValidationException;
+import org.apache.flink.table.api.WatermarkSpec;
 import org.apache.flink.table.utils.EncodingUtils;
 import org.apache.flink.table.utils.TypeStringUtils;
 import org.apache.flink.util.InstantiationUtil;
@@ -77,6 +78,20 @@ public class DescriptorProperties {
 	private final boolean normalizeKeys;
 
 	private final Map<String, String> properties;
+
+	public static final String DATA_TYPE = "data-type";
+
+	public static final String EXPR = "expr";
+
+	public static final String WATERMARK = "watermark";
+
+	public static final String WATERMARK_ROWTIME = "rowtime";
+
+	public static final String WATERMARK_STRATEGY = "strategy";
+
+	public static final String WATERMARK_STRATEGY_EXPR = WATERMARK_STRATEGY + '.' + EXPR;
+
+	public static final String WATERMARK_STRATEGY_DATA_TYPE = WATERMARK_STRATEGY + '.' + DATA_TYPE;
 
 	public DescriptorProperties(boolean normalizeKeys) {
 		this.properties = new HashMap<>();
@@ -187,6 +202,26 @@ public class DescriptorProperties {
 		final List<List<String>> values = new ArrayList<>();
 		for (int i = 0; i < schema.getFieldCount(); i++) {
 			values.add(Arrays.asList(fieldNames[i], TypeStringUtils.writeTypeInfo(fieldTypes[i])));
+		}
+
+		if (!schema.getWatermarkSpecs().isEmpty()) {
+			final List<List<String>> watermarkValues = new ArrayList<>();
+			for (WatermarkSpec spec : schema.getWatermarkSpecs()) {
+				watermarkValues.add(
+					Arrays.asList(
+						spec.getRowtimeAttribute(),
+						spec.getWatermarkExpr(),
+						spec.getWatermarkExprOutputType()
+							.getLogicalType()
+							.asSerializableString()));
+			}
+			putIndexedFixedProperties(
+				key + '.' + WATERMARK,
+				Arrays.asList(
+					WATERMARK_ROWTIME,
+					WATERMARK_STRATEGY_EXPR,
+					WATERMARK_STRATEGY_DATA_TYPE),
+				watermarkValues);
 		}
 
 		putIndexedFixedProperties(

@@ -36,8 +36,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import static java.lang.String.format;
+import static org.apache.flink.table.descriptors.DescriptorProperties.WATERMARK;
 import static org.apache.flink.table.descriptors.Rowtime.ROWTIME;
 import static org.apache.flink.table.descriptors.Rowtime.ROWTIME_TIMESTAMPS_CLASS;
 import static org.apache.flink.table.descriptors.Rowtime.ROWTIME_TIMESTAMPS_FROM;
@@ -180,6 +182,19 @@ public class SchemaValidator implements DescriptorValidator {
 					tuple2.f0,
 					tuple2.f1))
 			);
+		}
+
+		Map<String, String> watermarkMap = properties.asMap().entrySet().stream()
+			.filter(entry -> entry.getKey().startsWith(SCHEMA + "." + WATERMARK))
+			.collect(Collectors.toMap(e ->
+				e.getKey().replaceFirst(SCHEMA + "\\." + WATERMARK + ".\\d+\\.", ""),
+				e -> e.getValue()));
+		if (!watermarkMap.isEmpty()) {
+			RowtimeValidator.getRowtimeComponents(properties, watermarkMap).ifPresent(tuple2 ->
+				attributes.add(new RowtimeAttributeDescriptor(
+					properties.getString(SCHEMA + "." + tuple2.f2 + "." + SCHEMA_NAME),
+					tuple2.f0,
+					tuple2.f1)));
 		}
 
 		return attributes;

@@ -18,13 +18,24 @@
 
 package org.apache.flink.table.planner.operations;
 
+import org.apache.calcite.rel.RelRoot;
+import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.sql.SqlDialect;
+import org.apache.calcite.sql.SqlIdentifier;
+import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.SqlNodeList;
+import org.apache.calcite.sql.dialect.CalciteSqlDialect;
+import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.flink.sql.parser.ddl.SqlCreateTable;
 import org.apache.flink.sql.parser.ddl.SqlDropTable;
+import org.apache.flink.sql.parser.ddl.SqlRegularColumn;
 import org.apache.flink.sql.parser.ddl.SqlTableColumn;
 import org.apache.flink.sql.parser.ddl.SqlTableOption;
 import org.apache.flink.sql.parser.dml.RichSqlInsert;
 import org.apache.flink.table.api.TableException;
 import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.api.WatermarkSpec;
 import org.apache.flink.table.catalog.CatalogTable;
 import org.apache.flink.table.catalog.CatalogTableImpl;
 import org.apache.flink.table.operations.CatalogSinkModifyOperation;
@@ -35,13 +46,7 @@ import org.apache.flink.table.planner.calcite.FlinkPlannerImpl;
 import org.apache.flink.table.planner.calcite.FlinkTypeFactory;
 import org.apache.flink.table.planner.calcite.FlinkTypeSystem;
 import org.apache.flink.table.runtime.types.LogicalTypeDataTypeConverter;
-
-import org.apache.calcite.rel.RelRoot;
-import org.apache.calcite.rel.type.RelDataType;
-import org.apache.calcite.sql.SqlIdentifier;
-import org.apache.calcite.sql.SqlKind;
-import org.apache.calcite.sql.SqlNode;
-import org.apache.calcite.sql.SqlNodeList;
+import org.apache.flink.table.types.DataType;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -183,33 +188,58 @@ public class SqlToOperationConverter {
 	 * @return TableSchema
 	 */
 	private TableSchema createTableSchema(SqlCreateTable sqlCreateTable,
-			FlinkTypeFactory factory) {
+										  FlinkTypeFactory factory) {
 		// setup table columns
 		SqlNodeList columnList = sqlCreateTable.getColumnList();
-		TableSchema physicalSchema = null;
+		TableSchema tableSchema = null;
 		TableSchema.Builder builder = new TableSchema.Builder();
 		// collect the physical table schema first.
 		final List<SqlNode> physicalColumns = columnList.getList().stream()
 			.filter(n -> n instanceof SqlTableColumn).collect(Collectors.toList());
+		Map<String, DataType> nameToTypeMap = new HashMap<>();
 		for (SqlNode node : physicalColumns) {
-			SqlTableColumn column = (SqlTableColumn) node;
+			SqlRegularColumn column = (SqlRegularColumn) node;
 			final RelDataType relType = column.getType().deriveType(factory,
 				column.getType().getNullable());
-			builder.field(column.getName().getSimple(),
-				LogicalTypeDataTypeConverter.fromLogicalTypeToDataType(
-					FlinkTypeFactory.toLogicalType(relType)));
-			physicalSchema = builder.build();
+			String name = column.getName().getSimple();
+			DataType dataType = LogicalTypeDataTypeConverter.fromLogicalTypeToDataType(
+				FlinkTypeFactory.toLogicalType(relType));
+			builder.field(name, dataType);
+			nameToTypeMap.put(name, dataType);
 		}
-		assert physicalSchema != null;
+		assert !nameToTypeMap.isEmpty();
 		if (sqlCreateTable.containsComputedColumn()) {
 			throw new SqlConversionException("Computed columns for DDL is not supported yet!");
 		}
-		return physicalSchema;
+
+		// !important 处理watermark
+		sqlCreateTable.getWatermark().ifPresent(sqlWatermark -> {
+			String rowtimeAttribute = sqlWatermark.getEventTimeColumnName().getSimple();
+			String watermarkExpressionString = getQuotedSqlString(sqlWatermark.getWatermarkStrategy());
+			DataType watermarkExprOutputType = nameToTypeMap.get(sqlWatermark.getEventTimeColumnName().getSimple());
+			builder.watermark(new WatermarkSpec(rowtimeAttribute, watermarkExpressionString, watermarkExprOutputType));
+		});
+
+		tableSchema = builder.build();
+
+		return tableSchema;
 	}
 
 	private PlannerQueryOperation toQueryOperation(FlinkPlannerImpl planner, SqlNode validated) {
 		// transform to a relational tree
 		RelRoot relational = planner.rel(validated);
 		return new PlannerQueryOperation(relational.project());
+	}
+
+	private String getQuotedSqlString(SqlNode sqlNode) {
+		SqlParser.Config parserConfig = flinkPlanner.parserConfig();
+		SqlDialect dialect =
+			new CalciteSqlDialect(
+				SqlDialect.EMPTY_CONTEXT
+					.withQuotedCasing(parserConfig.unquotedCasing())
+					.withConformance(parserConfig.conformance())
+					.withUnquotedCasing(parserConfig.unquotedCasing())
+					.withIdentifierQuoteString(parserConfig.quoting().string));
+		return sqlNode.toSqlString(dialect).getSql();
 	}
 }

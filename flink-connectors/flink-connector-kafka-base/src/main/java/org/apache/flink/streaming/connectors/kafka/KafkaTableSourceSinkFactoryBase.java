@@ -47,10 +47,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.table.descriptors.ConnectorDescriptorValidator.CONNECTOR_PROPERTY_VERSION;
 import static org.apache.flink.table.descriptors.ConnectorDescriptorValidator.CONNECTOR_TYPE;
 import static org.apache.flink.table.descriptors.ConnectorDescriptorValidator.CONNECTOR_VERSION;
+import static org.apache.flink.table.descriptors.DescriptorProperties.WATERMARK;
+import static org.apache.flink.table.descriptors.DescriptorProperties.WATERMARK_ROWTIME;
+import static org.apache.flink.table.descriptors.DescriptorProperties.WATERMARK_STRATEGY_DATA_TYPE;
+import static org.apache.flink.table.descriptors.DescriptorProperties.WATERMARK_STRATEGY_EXPR;
 import static org.apache.flink.table.descriptors.FormatDescriptorValidator.FORMAT;
 import static org.apache.flink.table.descriptors.KafkaValidator.CONNECTOR_PROPERTIES;
 import static org.apache.flink.table.descriptors.KafkaValidator.CONNECTOR_PROPERTIES_KEY;
@@ -130,6 +135,11 @@ public abstract class KafkaTableSourceSinkFactoryBase implements
 		properties.add(SCHEMA + ".#." + ROWTIME_WATERMARKS_SERIALIZED);
 		properties.add(SCHEMA + ".#." + ROWTIME_WATERMARKS_DELAY);
 
+		// watermark
+		properties.add(SCHEMA + "." + WATERMARK + ".#." + WATERMARK_ROWTIME);
+		properties.add(SCHEMA + "." + WATERMARK + ".#." + WATERMARK_STRATEGY_EXPR);
+		properties.add(SCHEMA + "." + WATERMARK + ".#." + WATERMARK_STRATEGY_DATA_TYPE);
+
 		// format wildcard
 		properties.add(FORMAT + ".*");
 
@@ -141,7 +151,11 @@ public abstract class KafkaTableSourceSinkFactoryBase implements
 		final DescriptorProperties descriptorProperties = getValidatedProperties(properties);
 
 		final String topic = descriptorProperties.getString(CONNECTOR_TOPIC);
-		final DeserializationSchema<Row> deserializationSchema = getDeserializationSchema(properties);
+		// 跳过watermark字段验证
+		Map<String, String> copyMap = properties.entrySet().stream()
+			.filter(entry -> !entry.getKey().startsWith(SCHEMA + "." + WATERMARK))
+			.collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue()));
+		final DeserializationSchema<Row> deserializationSchema = getDeserializationSchema(copyMap);
 		final StartupOptions startupOptions = getStartupOptions(descriptorProperties, topic);
 
 		return createKafkaTableSource(

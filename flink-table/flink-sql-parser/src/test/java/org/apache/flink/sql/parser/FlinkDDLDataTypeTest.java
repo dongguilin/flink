@@ -18,11 +18,6 @@
 
 package org.apache.flink.sql.parser;
 
-import org.apache.flink.sql.parser.ddl.SqlCreateTable;
-import org.apache.flink.sql.parser.ddl.SqlTableColumn;
-import org.apache.flink.sql.parser.impl.FlinkSqlParserImpl;
-import org.apache.flink.sql.parser.validate.FlinkSqlConformance;
-
 import org.apache.calcite.avatica.util.Casing;
 import org.apache.calcite.avatica.util.Quoting;
 import org.apache.calcite.rel.type.RelDataType;
@@ -43,12 +38,15 @@ import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.test.SqlValidatorTestCase;
 import org.apache.calcite.util.Util;
+import org.apache.flink.sql.parser.ddl.SqlCreateTable;
+import org.apache.flink.sql.parser.ddl.SqlRegularColumn;
+import org.apache.flink.sql.parser.impl.FlinkSqlParserImpl;
+import org.apache.flink.sql.parser.validate.FlinkSqlConformance;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 import javax.annotation.Nullable;
-
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -394,7 +392,7 @@ public class FlinkDDLDataTypeTest {
 			final SqlCreateTable sqlCreateTable = (SqlCreateTable) sqlNode;
 			SqlNodeList columns = sqlCreateTable.getColumnList();
 			assert columns.size() == 1;
-			RelDataType columnType = ((SqlTableColumn) columns.get(0)).getType()
+			RelDataType columnType = ((SqlRegularColumn) columns.get(0)).getType()
 				.deriveType(TYPE_FACTORY);
 			assertEquals(type, columnType);
 		}
@@ -431,7 +429,7 @@ public class FlinkDDLDataTypeTest {
 			final SqlCreateTable sqlCreateTable = (SqlCreateTable) sqlNode;
 			SqlNodeList columns = sqlCreateTable.getColumnList();
 			assert columns.size() == 1;
-			SqlDataTypeSpec dataTypeSpec = ((SqlTableColumn) columns.get(0)).getType();
+			SqlDataTypeSpec dataTypeSpec = ((SqlRegularColumn) columns.get(0)).getType();
 			SqlWriter sqlWriter = new SqlPrettyWriter(getSqlDialect(), false);
 			dataTypeSpec.unparse(sqlWriter, 0, 0);
 			assertEquals(expectedUnparsed, sqlWriter.toSqlString().getSql());

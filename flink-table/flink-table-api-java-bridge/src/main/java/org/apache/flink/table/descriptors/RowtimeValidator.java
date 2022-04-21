@@ -20,6 +20,7 @@ package org.apache.flink.table.descriptors;
 
 import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.table.api.ValidationException;
 import org.apache.flink.table.sources.tsextractors.ExistingField;
 import org.apache.flink.table.sources.tsextractors.StreamRecordTimestamp;
@@ -27,6 +28,7 @@ import org.apache.flink.table.sources.tsextractors.TimestampExtractor;
 import org.apache.flink.table.sources.wmstrategies.AscendingTimestamps;
 import org.apache.flink.table.sources.wmstrategies.BoundedOutOfOrderTimestamps;
 import org.apache.flink.table.sources.wmstrategies.PreserveWatermarks;
+import org.apache.flink.table.sources.wmstrategies.SqlWatermarkAssigner;
 import org.apache.flink.table.sources.wmstrategies.WatermarkStrategy;
 import org.apache.flink.table.utils.EncodingUtils;
 
@@ -35,6 +37,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
 
+import static org.apache.flink.table.descriptors.DescriptorProperties.WATERMARK_ROWTIME;
+import static org.apache.flink.table.descriptors.DescriptorProperties.WATERMARK_STRATEGY_EXPR;
 import static org.apache.flink.table.descriptors.Rowtime.ROWTIME_TIMESTAMPS_CLASS;
 import static org.apache.flink.table.descriptors.Rowtime.ROWTIME_TIMESTAMPS_FROM;
 import static org.apache.flink.table.descriptors.Rowtime.ROWTIME_TIMESTAMPS_SERIALIZED;
@@ -117,6 +121,21 @@ public class RowtimeValidator implements DescriptorValidator {
 	}
 
 	// utilities
+
+	public static Optional<Tuple3<TimestampExtractor, WatermarkStrategy, String>> getRowtimeComponents(
+		DescriptorProperties properties, Map<String, String> watermarkMap) {
+		String field = watermarkMap.get(WATERMARK_ROWTIME);
+		String index = properties.getIndexedProperty(Schema.SCHEMA, Schema.SCHEMA_NAME)
+			.entrySet().stream()
+			.filter(entry -> entry.getValue().equals(field))
+			.findFirst()
+			.map(entry -> {
+				String s = entry.getKey();
+				return s.substring(s.indexOf(".") + 1, s.lastIndexOf("."));
+			}).orElseThrow(() -> new IllegalArgumentException(""));
+		return Optional.of(new Tuple3<>(new ExistingField(field),
+			new SqlWatermarkAssigner(watermarkMap.get(WATERMARK_STRATEGY_EXPR)), index));
+	}
 
 	public static Optional<Tuple2<TimestampExtractor, WatermarkStrategy>> getRowtimeComponents(
 			DescriptorProperties properties, String prefix) {
