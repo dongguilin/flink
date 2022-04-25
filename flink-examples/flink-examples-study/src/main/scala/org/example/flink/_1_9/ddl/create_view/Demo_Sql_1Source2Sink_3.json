@@ -1,0 +1,200 @@
+{
+  "nodes": [
+    {
+      "id": 1,
+      "type": "Source: Kafka011TableSource(log_id, event_time, user_no, real_ip, login_status, login_code)",
+      "pact": "Data Source",
+      "contents": "Source: Kafka011TableSource(log_id, event_time, user_no, real_ip, login_status, login_code)",
+      "parallelism": 1
+    },
+    {
+      "id": 2,
+      "type": "SourceConversion(table=[default_catalog.default_database.kafka_source_table, source: [Kafka011TableSource(log_id, event_time, user_no, real_ip, login_status, login_code)]], fields=[log_id, event_time, user_no, real_ip, login_status, login_code])",
+      "pact": "Operator",
+      "contents": "SourceConversion(table=[default_catalog.default_database.kafka_source_table, source: [Kafka011TableSource(log_id, event_time, user_no, real_ip, login_status, login_code)]], fields=[log_id, event_time, user_no, real_ip, login_status, login_code])",
+      "parallelism": 1,
+      "predecessors": [
+        {
+          "id": 1,
+          "ship_strategy": "FORWARD",
+          "side": "second"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "Timestamps/Watermarks",
+      "pact": "Operator",
+      "contents": "Timestamps/Watermarks",
+      "parallelism": 1,
+      "predecessors": [
+        {
+          "id": 2,
+          "ship_strategy": "FORWARD",
+          "side": "second"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "Calc(select=[log_id, event_time, user_no], where=[(user_no <> _UTF-16LE'0001':VARCHAR(2147483647) CHARACTER SET \"UTF-16LE\")])",
+      "pact": "Operator",
+      "contents": "Calc(select=[log_id, event_time, user_no], where=[(user_no <> _UTF-16LE'0001':VARCHAR(2147483647) CHARACTER SET \"UTF-16LE\")])",
+      "parallelism": 1,
+      "predecessors": [
+        {
+          "id": 3,
+          "ship_strategy": "FORWARD",
+          "side": "second"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "SinkConversionToRow",
+      "pact": "Operator",
+      "contents": "SinkConversionToRow",
+      "parallelism": 1,
+      "predecessors": [
+        {
+          "id": 4,
+          "ship_strategy": "FORWARD",
+          "side": "second"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "Map",
+      "pact": "Operator",
+      "contents": "Map",
+      "parallelism": 1,
+      "predecessors": [
+        {
+          "id": 5,
+          "ship_strategy": "FORWARD",
+          "side": "second"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "Source: Kafka011TableSource(log_id, event_time, user_no, real_ip, login_status, login_code)",
+      "pact": "Data Source",
+      "contents": "Source: Kafka011TableSource(log_id, event_time, user_no, real_ip, login_status, login_code)",
+      "parallelism": 1
+    },
+    {
+      "id": 9,
+      "type": "SourceConversion(table=[default_catalog.default_database.kafka_source_table, source: [Kafka011TableSource(log_id, event_time, user_no, real_ip, login_status, login_code)]], fields=[log_id, event_time, user_no, real_ip, login_status, login_code])",
+      "pact": "Operator",
+      "contents": "SourceConversion(table=[default_catalog.default_database.kafka_source_table, source: [Kafka011TableSource(log_id, event_time, user_no, real_ip, login_status, login_code)]], fields=[log_id, event_time, user_no, real_ip, login_status, login_code])",
+      "parallelism": 1,
+      "predecessors": [
+        {
+          "id": 8,
+          "ship_strategy": "FORWARD",
+          "side": "second"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "Timestamps/Watermarks",
+      "pact": "Operator",
+      "contents": "Timestamps/Watermarks",
+      "parallelism": 1,
+      "predecessors": [
+        {
+          "id": 9,
+          "ship_strategy": "FORWARD",
+          "side": "second"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "Calc(select=[event_time, (login_status IF _UTF-16LE'成功' IF _UTF-16LE'失败') AS login_status], where=[(user_no <> _UTF-16LE'0001':VARCHAR(2147483647) CHARACTER SET \"UTF-16LE\")])",
+      "pact": "Operator",
+      "contents": "Calc(select=[event_time, (login_status IF _UTF-16LE'成功' IF _UTF-16LE'失败') AS login_status], where=[(user_no <> _UTF-16LE'0001':VARCHAR(2147483647) CHARACTER SET \"UTF-16LE\")])",
+      "parallelism": 1,
+      "predecessors": [
+        {
+          "id": 10,
+          "ship_strategy": "FORWARD",
+          "side": "second"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "GroupWindowAggregate(groupBy=[login_status], window=[SlidingGroupWindow('w$, event_time, 600000, 60000)], properties=[w$start, w$end, w$rowtime, w$proctime], select=[login_status, COUNT(*) AS countAll, start('w$) AS w$start, end('w$) AS w$end, rowtime('w$) AS w$rowtime, proctime('w$) AS w$proctime])",
+      "pact": "Operator",
+      "contents": "GroupWindowAggregate(groupBy=[login_status], window=[SlidingGroupWindow('w$, event_time, 600000, 60000)], properties=[w$start, w$end, w$rowtime, w$proctime], select=[login_status, COUNT(*) AS countAll, start('w$) AS w$start, end('w$) AS w$end, rowtime('w$) AS w$rowtime, proctime('w$) AS w$proctime])",
+      "parallelism": 1,
+      "predecessors": [
+        {
+          "id": 11,
+          "ship_strategy": "HASH",
+          "side": "second"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "Calc(select=[w$start AS hop_start, w$end AS hop_end, login_status, countAll])",
+      "pact": "Operator",
+      "contents": "Calc(select=[w$start AS hop_start, w$end AS hop_end, login_status, countAll])",
+      "parallelism": 1,
+      "predecessors": [
+        {
+          "id": 13,
+          "ship_strategy": "FORWARD",
+          "side": "second"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "SinkConversionToRow",
+      "pact": "Operator",
+      "contents": "SinkConversionToRow",
+      "parallelism": 1,
+      "predecessors": [
+        {
+          "id": 14,
+          "ship_strategy": "FORWARD",
+          "side": "second"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "Sink: CsvTableSink(log_id, event_time, user_no)",
+      "pact": "Data Sink",
+      "contents": "Sink: CsvTableSink(log_id, event_time, user_no)",
+      "parallelism": 1,
+      "predecessors": [
+        {
+          "id": 6,
+          "ship_strategy": "FORWARD",
+          "side": "second"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "type": "Sink: Kafka011TableSink(hop_start, hop_end, login_status, countAll)",
+      "pact": "Data Sink",
+      "contents": "Sink: Kafka011TableSink(hop_start, hop_end, login_status, countAll)",
+      "parallelism": 1,
+      "predecessors": [
+        {
+          "id": 15,
+          "ship_strategy": "FORWARD",
+          "side": "second"
+        }
+      ]
+    }
+  ]
+}

@@ -28,6 +28,7 @@ import org.apache.calcite.sql.SqlNodeList;
 import org.apache.calcite.sql.dialect.CalciteSqlDialect;
 import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.flink.sql.parser.ddl.SqlCreateTable;
+import org.apache.flink.sql.parser.ddl.SqlCreateView;
 import org.apache.flink.sql.parser.ddl.SqlDropTable;
 import org.apache.flink.sql.parser.ddl.SqlRegularColumn;
 import org.apache.flink.sql.parser.ddl.SqlTableOption;
@@ -40,10 +41,13 @@ import org.apache.flink.table.calcite.FlinkTypeFactory;
 import org.apache.flink.table.calcite.FlinkTypeSystem;
 import org.apache.flink.table.catalog.CatalogTable;
 import org.apache.flink.table.catalog.CatalogTableImpl;
+import org.apache.flink.table.catalog.CatalogView;
+import org.apache.flink.table.catalog.QueryOperationCatalogView;
 import org.apache.flink.table.operations.CatalogSinkModifyOperation;
 import org.apache.flink.table.operations.Operation;
 import org.apache.flink.table.operations.PlannerQueryOperation;
 import org.apache.flink.table.operations.ddl.CreateTableOperation;
+import org.apache.flink.table.operations.ddl.CreateViewOperation;
 import org.apache.flink.table.operations.ddl.DropTableOperation;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.utils.TypeConversions;
@@ -88,7 +92,9 @@ public class SqlToOperationConverter {
 		SqlToOperationConverter converter = new SqlToOperationConverter(flinkPlanner);
 		if (validated instanceof SqlCreateTable) {
 			return converter.convertCreateTable((SqlCreateTable) validated);
-		} if (validated instanceof SqlDropTable) {
+		} else if (validated instanceof SqlCreateView) {
+			return converter.convertCreateView((SqlCreateView) validated);
+		}  else if (validated instanceof SqlDropTable) {
 			return converter.convertDropTable((SqlDropTable) validated);
 		} else if (validated instanceof RichSqlInsert) {
 			return converter.convertSqlInsert((RichSqlInsert) validated);
@@ -143,6 +149,22 @@ public class SqlToOperationConverter {
 			tableComment);
 		return new CreateTableOperation(sqlCreateTable.fullTableName(), catalogTable,
 			sqlCreateTable.isIfNotExists());
+	}
+
+	private Operation convertCreateView(SqlCreateView sqlCreateView) {
+		final SqlNode query = sqlCreateView.getQuery();
+
+		SqlNode validateQuery = flinkPlanner.validate(query);
+		PlannerQueryOperation operation = toQueryOperation(flinkPlanner, validateQuery);
+
+		String viewComment = "";
+		if (sqlCreateView.getComment() != null) {
+			viewComment = sqlCreateView.getComment().getNlsString().getValue();
+		}
+
+		CatalogView catalogView = new QueryOperationCatalogView(operation, viewComment);
+
+		return new CreateViewOperation(sqlCreateView.fullViewName(), catalogView);
 	}
 
 	/** Convert DROP TABLE statement. */

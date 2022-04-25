@@ -18,9 +18,13 @@
 
 package org.apache.flink.table.api.internal
 
+import org.apache.calcite.jdbc.CalciteSchemaBuilder.asRootSchema
+import org.apache.calcite.sql._
+import org.apache.calcite.sql.parser.SqlParser
+import org.apache.calcite.tools.FrameworkConfig
 import org.apache.flink.annotation.VisibleForTesting
 import org.apache.flink.api.common.typeinfo.TypeInformation
-import org.apache.flink.sql.parser.ddl.{SqlCreateTable, SqlDropTable}
+import org.apache.flink.sql.parser.ddl.{SqlCreateTable, SqlCreateView, SqlDropTable}
 import org.apache.flink.sql.parser.dml.RichSqlInsert
 import org.apache.flink.table.api._
 import org.apache.flink.table.calcite.{FlinkPlannerImpl, FlinkRelBuilder}
@@ -29,10 +33,10 @@ import org.apache.flink.table.catalog.exceptions.TableNotExistException
 import org.apache.flink.table.expressions._
 import org.apache.flink.table.expressions.resolver.lookups.TableReferenceLookup
 import org.apache.flink.table.factories.{TableFactoryService, TableFactoryUtil, TableSinkFactory}
-import org.apache.flink.table.functions.{AggregateFunction, ScalarFunction, TableFunction, UserDefinedAggregateFunction, _}
-import org.apache.flink.table.operations.ddl.CreateTableOperation
+import org.apache.flink.table.functions._
+import org.apache.flink.table.operations._
+import org.apache.flink.table.operations.ddl.{CreateTableOperation, CreateViewOperation}
 import org.apache.flink.table.operations.utils.OperationTreeBuilder
-import org.apache.flink.table.operations.{CatalogQueryOperation, PlannerQueryOperation, TableSourceQueryOperation, _}
 import org.apache.flink.table.planner.PlanningConfigurationBuilder
 import org.apache.flink.table.sinks.{PartitionableTableSink, TableSink, TableSinkUtils}
 import org.apache.flink.table.sources.TableSource
@@ -40,15 +44,9 @@ import org.apache.flink.table.sqlexec.SqlToOperationConverter
 import org.apache.flink.table.util.JavaScalaConversionUtil
 import org.apache.flink.util.StringUtils
 
-import org.apache.calcite.jdbc.CalciteSchemaBuilder.asRootSchema
-import org.apache.calcite.sql._
-import org.apache.calcite.sql.parser.SqlParser
-import org.apache.calcite.tools.FrameworkConfig
-
-import _root_.java.util.{Optional, Map => JMap, HashMap => JHashMap}
-
-import _root_.scala.collection.JavaConverters._
+import _root_.java.util.{Optional, HashMap => JHashMap, Map => JMap}
 import _root_.scala.collection.JavaConversions._
+import _root_.scala.collection.JavaConverters._
 
 /**
   * The abstract base class for the implementation of batch TableEnvironment.
@@ -468,6 +466,12 @@ abstract class TableEnvImpl(
         registerCatalogTableInternal(operation.getTablePath,
           operation.getCatalogTable,
           operation.isIgnoreIfExists)
+      case createView: SqlCreateView =>
+        val operation = SqlToOperationConverter
+          .convert(planner, createView)
+          .asInstanceOf[CreateViewOperation]
+        registerCatalogTableInternal(operation.getViewPath, operation.getCatalogView, true)
+
       case dropTable: SqlDropTable =>
         val name = dropTable.fullTableName()
         val isIfExists = dropTable.getIfExists

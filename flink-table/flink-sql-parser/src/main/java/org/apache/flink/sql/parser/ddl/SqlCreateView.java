@@ -18,19 +18,17 @@
 
 package org.apache.flink.sql.parser.ddl;
 
-import org.apache.flink.sql.parser.ExtendedSqlNode;
-import org.apache.flink.sql.parser.error.SqlParseException;
-
 import org.apache.calcite.sql.SqlCharStringLiteral;
 import org.apache.calcite.sql.SqlCreate;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlKind;
-import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
 import org.apache.calcite.sql.SqlSpecialOperator;
 import org.apache.calcite.sql.SqlWriter;
 import org.apache.calcite.sql.parser.SqlParserPos;
+import org.apache.flink.sql.parser.ExtendedSqlNode;
+import org.apache.flink.sql.parser.error.SqlParseException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -66,7 +64,6 @@ public class SqlCreateView extends SqlCreate implements ExtendedSqlNode {
 		ops.add(viewName);
 		ops.add(fieldList);
 		ops.add(query);
-		ops.add(SqlLiteral.createBoolean(getReplace(), SqlParserPos.ZERO));
 		return ops;
 	}
 
@@ -89,9 +86,6 @@ public class SqlCreateView extends SqlCreate implements ExtendedSqlNode {
 	@Override
 	public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
 		writer.keyword("CREATE");
-		if (getReplace()) {
-			writer.keyword("OR REPLACE");
-		}
 		writer.keyword("VIEW");
 		viewName.unparse(writer, leftPrec, rightPrec);
 		if (fieldList.size() > 0) {
@@ -117,5 +111,9 @@ public class SqlCreateView extends SqlCreate implements ExtendedSqlNode {
 	@Override
 	public void validate() throws SqlParseException {
 		// no-op
+	}
+
+	public String[] fullViewName() {
+		return viewName.names.toArray(new String[0]);
 	}
 }
