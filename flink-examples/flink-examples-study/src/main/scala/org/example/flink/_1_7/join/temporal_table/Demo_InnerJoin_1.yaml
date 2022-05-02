@@ -1,0 +1,97 @@
+ExecutionPlan: |+
+  {
+    "nodes" : [ {
+      "id" : 1,
+      "type" : "Source: Collection Source",
+      "pact" : "Data Source",
+      "contents" : "Source: Collection Source",
+      "parallelism" : 1
+    }, {
+      "id" : 2,
+      "type" : "Source: Kafka011TableSource(log_id, event_time, user_no, real_ip, login_status, proctime)",
+      "pact" : "Data Source",
+      "contents" : "Source: Kafka011TableSource(log_id, event_time, user_no, real_ip, login_status, proctime)",
+      "parallelism" : 1
+    }, {
+      "id" : 3,
+      "type" : "from: (user_no, proctime)",
+      "pact" : "Operator",
+      "contents" : "from: (user_no, proctime)",
+      "parallelism" : 1,
+      "predecessors" : [ {
+        "id" : 2,
+        "ship_strategy" : "FORWARD",
+        "side" : "second"
+      } ]
+    }, {
+      "id" : 4,
+      "type" : "from: (u_user_no, u_user_name, u_proctime)",
+      "pact" : "Operator",
+      "contents" : "from: (u_user_no, u_user_name, u_proctime)",
+      "parallelism" : 1,
+      "predecessors" : [ {
+        "id" : 1,
+        "ship_strategy" : "FORWARD",
+        "side" : "second"
+      } ]
+    }, {
+      "id" : 5,
+      "type" : "select: (u_user_no, u_user_name)",
+      "pact" : "Operator",
+      "contents" : "select: (u_user_no, u_user_name)",
+      "parallelism" : 1,
+      "predecessors" : [ {
+        "id" : 4,
+        "ship_strategy" : "FORWARD",
+        "side" : "second"
+      } ]
+    }, {
+      "id" : 8,
+      "type" : "InnerJoin(where: (AND(__TEMPORAL_JOIN_CONDITION(proctime, u_user_no), =(user_no, u_user_no))), join: (user_no, proctime, u_user_no, u_user_name))",
+      "pact" : "Operator",
+      "contents" : "InnerJoin(where: (AND(__TEMPORAL_JOIN_CONDITION(proctime, u_user_no), =(user_no, u_user_no))), join: (user_no, proctime, u_user_no, u_user_name))",
+      "parallelism" : 1,
+      "predecessors" : [ {
+        "id" : 3,
+        "ship_strategy" : "HASH",
+        "side" : "second"
+      }, {
+        "id" : 5,
+        "ship_strategy" : "HASH",
+        "side" : "second"
+      } ]
+    }, {
+      "id" : 9,
+      "type" : "select: (user_no, u_user_name)",
+      "pact" : "Operator",
+      "contents" : "select: (user_no, u_user_name)",
+      "parallelism" : 1,
+      "predecessors" : [ {
+        "id" : 8,
+        "ship_strategy" : "FORWARD",
+        "side" : "second"
+      } ]
+    }, {
+      "id" : 10,
+      "type" : "to: Row",
+      "pact" : "Operator",
+      "contents" : "to: Row",
+      "parallelism" : 1,
+      "predecessors" : [ {
+        "id" : 9,
+        "ship_strategy" : "FORWARD",
+        "side" : "second"
+      } ]
+    }, {
+      "id" : 11,
+      "type" : "Sink: Print to Std. Out",
+      "pact" : "Data Sink",
+      "contents" : "Sink: Print to Std. Out",
+      "parallelism" : 1,
+      "predecessors" : [ {
+        "id" : 10,
+        "ship_strategy" : "FORWARD",
+        "side" : "second"
+      } ]
+    } ]
+  }
