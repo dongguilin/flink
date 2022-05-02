@@ -18,10 +18,10 @@
 
 package org.apache.flink.table.functions
 
-import java.io.File
-
 import org.apache.flink.api.common.functions.RuntimeContext
 import org.apache.flink.metrics.MetricGroup
+
+import java.io.File
 
 /**
   * A FunctionContext allows to obtain global runtime information about the context in which the
@@ -31,6 +31,8 @@ import org.apache.flink.metrics.MetricGroup
   * @param context the runtime context in which the Flink Function is executed
   */
 class FunctionContext(context: RuntimeContext) {
+
+  def getRuntimeContext: RuntimeContext = context
 
   /**
     * Returns the metric group for this parallel subtask.

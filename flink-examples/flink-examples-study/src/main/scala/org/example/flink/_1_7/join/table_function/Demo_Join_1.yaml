@@ -1,0 +1,109 @@
+ExecutionPlan: |+
+  {
+    "nodes" : [ {
+      "id" : 1,
+      "type" : "Source: Kafka011TableSource(log_id, event_time, user_no, real_ip, login_status, proctime)",
+      "pact" : "Data Source",
+      "contents" : "Source: Kafka011TableSource(log_id, event_time, user_no, real_ip, login_status, proctime)",
+      "parallelism" : 1
+    }, {
+      "id" : 2,
+      "type" : "from: (log_id, event_time, user_no, real_ip, login_status, proctime)",
+      "pact" : "Operator",
+      "contents" : "from: (log_id, event_time, user_no, real_ip, login_status, proctime)",
+      "parallelism" : 1,
+      "predecessors" : [ {
+        "id" : 1,
+        "ship_strategy" : "FORWARD",
+        "side" : "second"
+      } ]
+    }, {
+      "id" : 3,
+      "type" : "where: (IS FALSE(login_status)), select: (log_id, event_time, user_no, real_ip, login_status, proctime)",
+      "pact" : "Operator",
+      "contents" : "where: (IS FALSE(login_status)), select: (log_id, event_time, user_no, real_ip, login_status, proctime)",
+      "parallelism" : 1,
+      "predecessors" : [ {
+        "id" : 2,
+        "ship_strategy" : "FORWARD",
+        "side" : "second"
+      } ]
+    }, {
+      "id" : 4,
+      "type" : "correlate: table(education_udtf($cor0.user_no)), select: log_id, event_time, user_no, real_ip, login_status, proctime, f0",
+      "pact" : "Operator",
+      "contents" : "correlate: table(education_udtf($cor0.user_no)), select: log_id, event_time, user_no, real_ip, login_status, proctime, f0",
+      "parallelism" : 1,
+      "predecessors" : [ {
+        "id" : 3,
+        "ship_strategy" : "FORWARD",
+        "side" : "second"
+      } ]
+    }, {
+      "id" : 5,
+      "type" : "correlate: table(user_udtf($cor1.user_no)), select: log_id, event_time, user_no, real_ip, login_status, proctime, f0, userName, gender, age, city",
+      "pact" : "Operator",
+      "contents" : "correlate: table(user_udtf($cor1.user_no)), select: log_id, event_time, user_no, real_ip, login_status, proctime, f0, userName, gender, age, city",
+      "parallelism" : 1,
+      "predecessors" : [ {
+        "id" : 4,
+        "ship_strategy" : "FORWARD",
+        "side" : "second"
+      } ]
+    }, {
+      "id" : 6,
+      "type" : "select: (proctime, user_no, f0, userName, gender, age, city)",
+      "pact" : "Operator",
+      "contents" : "select: (proctime, user_no, f0, userName, gender, age, city)",
+      "parallelism" : 1,
+      "predecessors" : [ {
+        "id" : 5,
+        "ship_strategy" : "FORWARD",
+        "side" : "second"
+      } ]
+    }, {
+      "id" : 8,
+      "type" : "groupBy: (user_no, f0, userName, gender, age, city), window: (SlidingGroupWindow('w$, 'proctime, 600000.millis, 60000.millis)), select: (user_no, f0, userName, gender, age, city, COUNT(*) AS error_times, start('w$) AS w$start, end('w$) AS w$end, proctime('w$) AS w$proctime)",
+      "pact" : "Operator",
+      "contents" : "groupBy: (user_no, f0, userName, gender, age, city), window: (SlidingGroupWindow('w$, 'proctime, 600000.millis, 60000.millis)), select: (user_no, f0, userName, gender, age, city, COUNT(*) AS error_times, start('w$) AS w$start, end('w$) AS w$end, proctime('w$) AS w$proctime)",
+      "parallelism" : 1,
+      "predecessors" : [ {
+        "id" : 6,
+        "ship_strategy" : "HASH",
+        "side" : "second"
+      } ]
+    }, {
+      "id" : 9,
+      "type" : "where: (>(error_times, 1)), select: (w$start AS hop_start, w$end AS hop_end, CAST(PROCTIME(w$proctime)) AS hop_proctime, user_no, userName AS user_name, gender, age, city, f0 AS education, error_times)",
+      "pact" : "Operator",
+      "contents" : "where: (>(error_times, 1)), select: (w$start AS hop_start, w$end AS hop_end, CAST(PROCTIME(w$proctime)) AS hop_proctime, user_no, userName AS user_name, gender, age, city, f0 AS education, error_times)",
+      "parallelism" : 1,
+      "predecessors" : [ {
+        "id" : 8,
+        "ship_strategy" : "FORWARD",
+        "side" : "second"
+      } ]
+    }, {
+      "id" : 10,
+      "type" : "to: Row",
+      "pact" : "Operator",
+      "contents" : "to: Row",
+      "parallelism" : 1,
+      "predecessors" : [ {
+        "id" : 9,
+        "ship_strategy" : "FORWARD",
+        "side" : "second"
+      } ]
+    }, {
+      "id" : 11,
+      "type" : "Sink: Kafka011TableSink(*)",
+      "pact" : "Data Sink",
+      "contents" : "Sink: Kafka011TableSink(*)",
+      "parallelism" : 1,
+      "predecessors" : [ {
+        "id" : 10,
+        "ship_strategy" : "FORWARD",
+        "side" : "second"
+      } ]
+    } ]
+  }
