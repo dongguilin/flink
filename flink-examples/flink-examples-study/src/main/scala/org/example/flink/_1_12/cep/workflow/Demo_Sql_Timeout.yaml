@@ -1,0 +1,41 @@
+explain: |+
+  == Abstract Syntax Tree ==
+  LogicalSink(table=[default_catalog.default_database.kafka_sink_table], fields=[tag, s_log_id, s_event_time, s_flow_id, user_no, ex_log_id, ex_event_time, ex_stage_id, ex_approver])
+  +- LogicalProject(tag=[IF(>(CAST(/INT(Reinterpret(-($6, $2)), 60000)):INTEGER, 60), _UTF-16LE'超时', _UTF-16LE'正常')], s_log_id=[$1], s_event_time=[DATE_FORMAT($2, _UTF-16LE'yyyy-MM-dd HH:mm:ss')], s_flow_id=[$3], user_no=[$4], ex_log_id=[$5], ex_event_time=[DATE_FORMAT($6, _UTF-16LE'yyyy-MM-dd HH:mm:ss')], ex_stage_id=[$7], ex_approver=[$8])
+  +- LogicalMatch(partition=[[3]], order=[[1 ASC-nulls-first]], outputFields=[[flow_id, s_log_id, s_event_time, s_flow_id, user_no, ex_log_id, ex_event_time, ex_stage_id, ex_approver]], allRows=[false], after=[FLAG(SKIP PAST LAST ROW)], pattern=[((_UTF-16LE'A', PATTERN_QUANTIFIER(_UTF-16LE'B', 0, -1, false)), _UTF-16LE'C')], isStrictStarts=[false], isStrictEnds=[false], interval=[3660000:INTERVAL MINUTE], subsets=[[]], patternDefinitions=[[=(PREV(A.$4, 0), _UTF-16LE'stage_start'), AND(<>(PREV(B.$4, 0), _UTF-16LE'stage_start'), <>(PREV(B.$4, 0), _UTF-16LE'stage_end'), <(CAST(/INT(Reinterpret(-(PREV(B.$1, 0), LAST(A.$1, 0))), 60000)):INTEGER, 60)), OR(AND(<>(PREV(C.$4, 0), _UTF-16LE'stage_start'), >(CAST(/INT(Reinterpret(-(PREV(C.$1, 0), LAST(A.$1, 0))), 60000)):INTEGER, 60)), AND(=(PREV(C.$4, 0), _UTF-16LE'stage_end'), <=(CAST(/INT(Reinterpret(-(PREV(C.$1, 0), LAST(A.$1, 0))), 60000)):INTEGER, 60)))]], inputFields=[[log_id, event_time, event_type, flow_id, stage_id, user_no, approver, tag]])
+  +- LogicalProject(log_id=[$0], event_time=[$1], event_type=[$2], flow_id=[$3], stage_id=[$4], user_no=[$5], approver=[$6], tag=[$7])
+  +- LogicalFilter(condition=[=($2, _UTF-16LE'workflow')])
+  +- LogicalWatermarkAssigner(rowtime=[event_time], watermark=[-($1, 180000:INTERVAL MINUTE)])
+  +- LogicalTableScan(table=[[default_catalog, default_database, kafka_source_table]])
+  
+  == Optimized Logical Plan ==
+  Sink(table=[default_catalog.default_database.kafka_sink_table], fields=[tag, s_log_id, s_event_time, s_flow_id, user_no, ex_log_id, ex_event_time, ex_stage_id, ex_approver], changelogMode=[NONE]): rowcount = 1.5E7, cumulative cost = {1.75E8 rows, 2.695E9 cpu, 9.6E9 io, 1.5E9 network, 0.0 memory}
+  +- Calc(select=[IF(>(CAST(/INT(Reinterpret(-(ex_event_time, s_event_time)), 60000)), 60), _UTF-16LE'超时', _UTF-16LE'正常') AS tag, s_log_id, DATE_FORMAT(s_event_time, _UTF-16LE'yyyy-MM-dd HH:mm:ss') AS s_event_time, s_flow_id, user_no, ex_log_id, DATE_FORMAT(ex_event_time, _UTF-16LE'yyyy-MM-dd HH:mm:ss') AS ex_event_time, ex_stage_id, ex_approver], changelogMode=[I]): rowcount = 1.5E7, cumulative cost = {1.6E8 rows, 2.68E9 cpu, 9.6E9 io, 1.5E9 network, 0.0 memory}
+    +- Match(partitionBy=[flow_id], orderBy=[event_time ASC], measures=[FINAL(A.log_id) AS s_log_id, FINAL(CAST(A.event_time)) AS s_event_time, FINAL(A.flow_id) AS s_flow_id, FINAL(A.user_no) AS user_no, FINAL(LAST(C.log_id, 0)) AS ex_log_id, FINAL(LAST(CAST(C.event_time), 0)) AS ex_event_time, FINAL(LAST(C.stage_id, 0)) AS ex_stage_id, FINAL(LAST(C.approver, 0)) AS ex_approver], rowsPerMatch=[ONE ROW PER MATCH], after=[SKIP PAST LAST ROW], pattern=[((_UTF-16LE'A', PATTERN_QUANTIFIER(_UTF-16LE'B', 0, -1, false)), _UTF-16LE'C')], define=[{A==(PREV(A.$4, 0), _UTF-16LE'stage_start'), B=AND(<>(PREV(B.$4, 0), _UTF-16LE'stage_start'), <>(PREV(B.$4, 0), _UTF-16LE'stage_end'), <(CAST(/INT(Reinterpret(-(PREV(CAST(B.$1):TIMESTAMP(3), 0), LAST(CAST(A.$1):TIMESTAMP(3), 0))), 60000)):INTEGER, 60)), C=OR(AND(<>(PREV(C.$4, 0), _UTF-16LE'stage_start'), >(CAST(/INT(Reinterpret(-(PREV(CAST(C.$1):TIMESTAMP(3), 0), LAST(CAST(A.$1):TIMESTAMP(3), 0))), 60000)):INTEGER, 60)), AND(=(PREV(C.$4, 0), _UTF-16LE'stage_end'), <=(CAST(/INT(Reinterpret(-(PREV(CAST(C.$1):TIMESTAMP(3), 0), LAST(CAST(A.$1):TIMESTAMP(3), 0))), 60000)):INTEGER, 60)))}], changelogMode=[I]): rowcount = 1.5E7, cumulative cost = {1.45E8 rows, 2.635E9 cpu, 9.6E9 io, 1.5E9 network, 0.0 memory}
+      +- Exchange(distribution=[hash[flow_id]], changelogMode=[I]): rowcount = 1.5E7, cumulative cost = {1.3E8 rows, 2.62E9 cpu, 9.6E9 io, 1.5E9 network, 0.0 memory}
+        +- Calc(select=[log_id, event_time, CAST(_UTF-16LE'workflow':VARCHAR(2147483647) CHARACTER SET "UTF-16LE") AS event_type, flow_id, stage_id, user_no, approver, tag], where=[=(event_type, _UTF-16LE'workflow':VARCHAR(2147483647) CHARACTER SET "UTF-16LE")], changelogMode=[I]): rowcount = 1.5E7, cumulative cost = {1.15E8 rows, 1.0E8 cpu, 9.6E9 io, 0.0 network, 0.0 memory}
+          +- TableSourceScan(table=[[default_catalog, default_database, kafka_source_table, watermark=[-($1, 180000:INTERVAL MINUTE)]]], fields=[log_id, event_time, event_type, flow_id, stage_id, user_no, approver, tag], changelogMode=[I]): rowcount = 1.0E8, cumulative cost = {1.0E8 rows, 1.0E8 cpu, 9.6E9 io, 0.0 network, 0.0 memory}
+    
+  == Physical Execution Plan ==
+  Stage 1 : Data Source
+    content : Source: TableSourceScan(table=[[default_catalog, default_database, kafka_source_table, watermark=[-($1, 180000:INTERVAL MINUTE)]]], fields=[log_id, event_time, event_type, flow_id, stage_id, user_no, approver, tag])
+    
+    Stage 2 : Operator
+      content : Calc(select=[log_id, event_time, CAST(_UTF-16LE'workflow':VARCHAR(2147483647) CHARACTER SET "UTF-16LE") AS event_type, flow_id, stage_id, user_no, approver, tag], where=[(event_type = _UTF-16LE'workflow':VARCHAR(2147483647) CHARACTER SET "UTF-16LE")])
+      ship_strategy : FORWARD
+      
+      Stage 4 : Operator
+        content : rowtime field: (#1: event_time TIME ATTRIBUTE(ROWTIME))
+        ship_strategy : HASH
+        
+        Stage 5 : Operator
+          content : Match(partitionBy=[flow_id], orderBy=[event_time ASC], measures=[FINAL(A.log_id) AS s_log_id, FINAL(CAST(A.event_time)) AS s_event_time, FINAL(A.flow_id) AS s_flow_id, FINAL(A.user_no) AS user_no, FINAL(LAST(C.log_id, 0)) AS ex_log_id, FINAL(LAST(CAST(C.event_time), 0)) AS ex_event_time, FINAL(LAST(C.stage_id, 0)) AS ex_stage_id, FINAL(LAST(C.approver, 0)) AS ex_approver], rowsPerMatch=[ONE ROW PER MATCH], after=[SKIP PAST LAST ROW], pattern=[((_UTF-16LE'A', PATTERN_QUANTIFIER(_UTF-16LE'B', 0, -1, false)), _UTF-16LE'C')], define=[{A==(PREV(A.$4, 0), _UTF-16LE'stage_start'), B=AND(<>(PREV(B.$4, 0), _UTF-16LE'stage_start'), <>(PREV(B.$4, 0), _UTF-16LE'stage_end'), <(CAST(/INT(Reinterpret(-(PREV(CAST(B.$1):TIMESTAMP(3), 0), LAST(CAST(A.$1):TIMESTAMP(3), 0))), 60000)):INTEGER, 60)), C=OR(AND(<>(PREV(C.$4, 0), _UTF-16LE'stage_start'), >(CAST(/INT(Reinterpret(-(PREV(CAST(C.$1):TIMESTAMP(3), 0), LAST(CAST(A.$1):TIMESTAMP(3), 0))), 60000)):INTEGER, 60)), AND(=(PREV(C.$4, 0), _UTF-16LE'stage_end'), <=(CAST(/INT(Reinterpret(-(PREV(CAST(C.$1):TIMESTAMP(3), 0), LAST(CAST(A.$1):TIMESTAMP(3), 0))), 60000)):INTEGER, 60)))}])
+          ship_strategy : FORWARD
+          
+          Stage 6 : Operator
+            content : Calc(select=[((CAST((Reinterpret((ex_event_time - s_event_time)) /INT 60000)) > 60) IF _UTF-16LE'超时' IF _UTF-16LE'正常') AS tag, s_log_id, (s_event_time DATE_FORMAT _UTF-16LE'yyyy-MM-dd HH:mm:ss') AS s_event_time, s_flow_id, user_no, ex_log_id, (ex_event_time DATE_FORMAT _UTF-16LE'yyyy-MM-dd HH:mm:ss') AS ex_event_time, ex_stage_id, ex_approver])
+            ship_strategy : FORWARD
+            
+            Stage 7 : Data Sink
+              content : Sink: Sink(table=[default_catalog.default_database.kafka_sink_table], fields=[tag, s_log_id, s_event_time, s_flow_id, user_no, ex_log_id, ex_event_time, ex_stage_id, ex_approver])
+              ship_strategy : FORWARD

@@ -1,0 +1,65 @@
+ExecutionPlan: |+
+  {
+    "nodes" : [ {
+      "id" : 1,
+      "type" : "Source: TableSourceScan(table=[[default_catalog, default_database, kafka_source_table, watermark=[-($1, 180000:INTERVAL MINUTE)]]], fields=[log_id, event_time, event_type, flow_id, stage_id, user_no, approver, tag])",
+      "pact" : "Data Source",
+      "contents" : "Source: TableSourceScan(table=[[default_catalog, default_database, kafka_source_table, watermark=[-($1, 180000:INTERVAL MINUTE)]]], fields=[log_id, event_time, event_type, flow_id, stage_id, user_no, approver, tag])",
+      "parallelism" : 1
+    }, {
+      "id" : 2,
+      "type" : "SinkConversionToRow",
+      "pact" : "Operator",
+      "contents" : "SinkConversionToRow",
+      "parallelism" : 1,
+      "predecessors" : [ {
+        "id" : 1,
+        "ship_strategy" : "FORWARD",
+        "side" : "second"
+      } ]
+    }, {
+      "id" : 3,
+      "type" : "Filter",
+      "pact" : "Operator",
+      "contents" : "Filter",
+      "parallelism" : 1,
+      "predecessors" : [ {
+        "id" : 2,
+        "ship_strategy" : "FORWARD",
+        "side" : "second"
+      } ]
+    }, {
+      "id" : 5,
+      "type" : "CepOperator",
+      "pact" : "Operator",
+      "contents" : "CepOperator",
+      "parallelism" : 1,
+      "predecessors" : [ {
+        "id" : 3,
+        "ship_strategy" : "HASH",
+        "side" : "second"
+      } ]
+    }, {
+      "id" : 6,
+      "type" : "Sink: normal",
+      "pact" : "Data Sink",
+      "contents" : "Sink: normal",
+      "parallelism" : 1,
+      "predecessors" : [ {
+        "id" : 5,
+        "ship_strategy" : "FORWARD",
+        "side" : "second"
+      } ]
+    }, {
+      "id" : 8,
+      "type" : "Sink: timeout",
+      "pact" : "Data Sink",
+      "contents" : "Sink: timeout",
+      "parallelism" : 1,
+      "predecessors" : [ {
+        "id" : 5,
+        "ship_strategy" : "FORWARD",
+        "side" : "second"
+      } ]
+    } ]
+  }
