@@ -1,0 +1,68 @@
+explain: |+
+  == Abstract Syntax Tree ==
+  LogicalLegacySink(name=[`default_catalog`.`default_database`.`file_sink_table`], fields=[log_id, event_time, user_no, login_status])
+  +- LogicalProject(log_id=[$0], event_time=[CAST($1):VARCHAR(2147483647) CHARACTER SET "UTF-16LE"], user_no=[$2], login_status=[$4])
+  +- LogicalFilter(condition=[<>($2, _UTF-16LE'0001')])
+  +- LogicalProject(log_id=[$0], event_time=[$1], user_no=[$2], real_ip=[$3], login_status=[IF($4, _UTF-16LE'成功', _UTF-16LE'失败')])
+  +- LogicalWatermarkAssigner(rowtime=[event_time], watermark=[-($1, 30000:INTERVAL SECOND)])
+  +- LogicalTableScan(table=[[default_catalog, default_database, kafka_source_table]])
+  
+  LogicalSink(table=[default_catalog.default_database.kafka_sink_table], fields=[hop_start, hop_end, login_status, countAll])
+  +- LogicalProject(hop_start=[CAST(HOP_START($0)):VARCHAR(2147483647) CHARACTER SET "UTF-16LE"], hop_end=[CAST(HOP_END($0)):VARCHAR(2147483647) CHARACTER SET "UTF-16LE"], login_status=[$1], countAll=[$2])
+  +- LogicalAggregate(group=[{0, 1}], countAll=[COUNT()])
+  +- LogicalProject($f0=[HOP($1, 60000:INTERVAL MINUTE, 600000:INTERVAL MINUTE)], login_status=[$4])
+  +- LogicalFilter(condition=[<>($2, _UTF-16LE'0001')])
+  +- LogicalProject(log_id=[$0], event_time=[$1], user_no=[$2], real_ip=[$3], login_status=[IF($4, _UTF-16LE'成功', _UTF-16LE'失败')])
+  +- LogicalWatermarkAssigner(rowtime=[event_time], watermark=[-($1, 30000:INTERVAL SECOND)])
+  +- LogicalTableScan(table=[[default_catalog, default_database, kafka_source_table]])
+  
+  == Optimized Logical Plan ==
+  WatermarkAssigner(rowtime=[event_time], watermark=[-(event_time, 30000:INTERVAL SECOND)], changelogMode=[I], reuse_id=[1]): rowcount = 1.0E8, cumulative cost = {2.0E8 rows, 2.0E8 cpu, 6.1E9 io, 0.0 network, 0.0 memory}
+  +- TableSourceScan(table=[[default_catalog, default_database, kafka_source_table]], fields=[log_id, event_time, user_no, real_ip, login_status, login_code], changelogMode=[I]): rowcount = 1.0E8, cumulative cost = {1.0E8 rows, 1.0E8 cpu, 6.1E9 io, 0.0 network, 0.0 memory}
+  
+  LegacySink(name=[`default_catalog`.`default_database`.`file_sink_table`], fields=[log_id, event_time, user_no, login_status], changelogMode=[NONE]): rowcount = 5.0E7, cumulative cost = {3.0E8 rows, 3.0E8 cpu, 6.1E9 io, 0.0 network, 0.0 memory}
+  +- Calc(select=[log_id, CAST(CAST(event_time)) AS event_time, user_no, IF(login_status, _UTF-16LE'成功', _UTF-16LE'失败') AS login_status], where=[<>(user_no, _UTF-16LE'0001':VARCHAR(2147483647) CHARACTER SET "UTF-16LE")], changelogMode=[I]): rowcount = 5.0E7, cumulative cost = {2.5E8 rows, 2.5E8 cpu, 6.1E9 io, 0.0 network, 0.0 memory}
+    +- Reused(reference_id=[1])
+  
+  Sink(table=[default_catalog.default_database.kafka_sink_table], fields=[hop_start, hop_end, login_status, countAll], changelogMode=[NONE]): rowcount = 5.0E7, cumulative cost = {4.5E8 rows, 8.75E9 cpu, 6.1E9 io, 8.0E8 network, 0.0 memory}
+  +- Calc(select=[CAST(w$start) AS hop_start, CAST(w$end) AS hop_end, login_status, countAll], changelogMode=[I]): rowcount = 5.0E7, cumulative cost = {4.0E8 rows, 8.7E9 cpu, 6.1E9 io, 8.0E8 network, 0.0 memory}
+    +- GroupWindowAggregate(groupBy=[login_status], window=[SlidingGroupWindow('w$, event_time, 600000, 60000)], properties=[w$start, w$end, w$rowtime, w$proctime], select=[login_status, COUNT(*) AS countAll, start('w$) AS w$start, end('w$) AS w$end, rowtime('w$) AS w$rowtime, proctime('w$) AS w$proctime], changelogMode=[I]): rowcount = 5.0E7, cumulative cost = {3.5E8 rows, 8.7E9 cpu, 6.1E9 io, 8.0E8 network, 0.0 memory}
+      +- Exchange(distribution=[hash[login_status]], changelogMode=[I]): rowcount = 5.0E7, cumulative cost = {3.0E8 rows, 8.65E9 cpu, 6.1E9 io, 8.0E8 network, 0.0 memory}
+        +- Calc(select=[event_time, IF(login_status, _UTF-16LE'成功', _UTF-16LE'失败') AS login_status], where=[<>(user_no, _UTF-16LE'0001':VARCHAR(2147483647) CHARACTER SET "UTF-16LE")], changelogMode=[I]): rowcount = 5.0E7, cumulative cost = {2.5E8 rows, 2.5E8 cpu, 6.1E9 io, 0.0 network, 0.0 memory}
+          +- Reused(reference_id=[1])
+  
+  == Physical Execution Plan ==
+  Stage 1 : Data Source
+    content : Source: TableSourceScan(table=[[default_catalog, default_database, kafka_source_table]], fields=[log_id, event_time, user_no, real_ip, login_status, login_code])
+    
+    Stage 2 : Operator
+      content : WatermarkAssigner(rowtime=[event_time], watermark=[(event_time - 30000:INTERVAL SECOND)])
+      ship_strategy : FORWARD
+      
+      Stage 3 : Operator
+        content : Calc(select=[log_id, CAST(CAST(event_time)) AS event_time, user_no, (login_status IF _UTF-16LE'成功' IF _UTF-16LE'失败') AS login_status], where=[(user_no <> _UTF-16LE'0001':VARCHAR(2147483647) CHARACTER SET "UTF-16LE")])
+        ship_strategy : FORWARD
+        
+        Stage 4 : Operator
+          content : StreamingFileWriter
+          ship_strategy : FORWARD
+          
+          Stage 6 : Operator
+            content : Calc(select=[event_time, (login_status IF _UTF-16LE'成功' IF _UTF-16LE'失败') AS login_status], where=[(user_no <> _UTF-16LE'0001':VARCHAR(2147483647) CHARACTER SET "UTF-16LE")])
+            ship_strategy : FORWARD
+            
+            Stage 8 : Operator
+              content : GroupWindowAggregate(groupBy=[login_status], window=[SlidingGroupWindow('w$, event_time, 600000, 60000)], properties=[w$start, w$end, w$rowtime, w$proctime], select=[login_status, COUNT(*) AS countAll, start('w$) AS w$start, end('w$) AS w$end, rowtime('w$) AS w$rowtime, proctime('w$) AS w$proctime])
+              ship_strategy : HASH
+              
+              Stage 9 : Operator
+                content : Calc(select=[CAST(w$start) AS hop_start, CAST(w$end) AS hop_end, login_status, countAll])
+                ship_strategy : FORWARD
+                
+                Stage 5 : Data Sink
+                  content : Sink: Unnamed
+                  ship_strategy : FORWARD
+                  
+                  Stage 10 : Data Sink
+                    content : Sink: Sink(table=[default_catalog.default_database.kafka_sink_table], fields=[hop_start, hop_end, login_status, countAll])
+                    ship_strategy : FORWARD
