@@ -1,0 +1,109 @@
+explain: |+
+  == Abstract Syntax Tree ==
+  LogicalSink(table=[default_catalog.default_database.kafka_sink_table], fields=[hop_start, hop_end, hop_proctime, user_no, user_name, gender, age, city, error_times])
+  +- LogicalProject(hop_start=[CAST(HOP_START($0)):VARCHAR(2147483647) CHARACTER SET "UTF-16LE" NOT NULL], hop_end=[CAST(HOP_END($0)):VARCHAR(2147483647) CHARACTER SET "UTF-16LE" NOT NULL], hop_proctime=[CAST(HOP_PROCTIME($0)):VARCHAR(2147483647) CHARACTER SET "UTF-16LE" NOT NULL], user_no=[$1], user_name=[$2], gender=[$3], age=[$4], city=[$5], error_times=[$6])
+  +- LogicalFilter(condition=[>($6, 1)])
+  +- LogicalAggregate(group=[{0, 1, 2, 3, 4, 5}], error_times=[COUNT()])
+  +- LogicalProject($f0=[$HOP($6, 60000:INTERVAL MINUTE, 600000:INTERVAL MINUTE)], user_no=[$2], user_name=[$7], gender=[$8], age=[CAST($9):INTEGER], city=[$10])
+  +- LogicalFilter(condition=[IS FALSE($4)])
+  +- LogicalCorrelate(correlation=[$cor2], joinType=[left], requiredColumns=[{0, 2}])
+  :- LogicalProject(log_id=[$0], event_time=[$1], user_no=[$2], real_ip=[$3], login_status=[$4], login_code=[$5], proctime=[PROCTIME()])
+  :  +- LogicalTableScan(table=[[default_catalog, default_database, kafka_source_table]])
+  +- LogicalTableFunctionScan(invocation=[user_udtf($cor2.log_id, $cor2.user_no)], rowType=[*org.example.flink._1_13.join.table_function.udtf.User<`userName` STRING, `gender` STRING, `age` INT NOT NULL, `city` STRING>*])
+  
+  == Optimized Physical Plan ==
+  Sink(table=[default_catalog.default_database.kafka_sink_table], fields=[hop_start, hop_end, hop_proctime, user_no, user_name, gender, age, city, error_times], changelogMode=[NONE]): rowcount = 4.25E7, cumulative cost = {6.1E8 rows, 1.73975E10 cpu, 6.1E9 io, 5.44E9 network, 0.0 memory}
+  +- Calc(select=[CAST(CAST(w$start)) AS hop_start, CAST(CAST(w$end)) AS hop_end, CAST(PROCTIME_MATERIALIZE(CAST(w$proctime))) AS hop_proctime, user_no, userName AS user_name, gender, age, city, error_times], where=[>(error_times, 1)], changelogMode=[I]): rowcount = 4.25E7, cumulative cost = {5.675E8 rows, 1.7355E10 cpu, 6.1E9 io, 5.44E9 network, 0.0 memory}
+    +- GroupWindowAggregate(groupBy=[user_no, userName, gender, age, city], window=[SlidingGroupWindow('w$, proctime, 600000, 60000)], properties=[w$start, w$end, w$proctime], select=[user_no, userName, gender, age, city, COUNT(*) AS error_times, start('w$) AS w$start, end('w$) AS w$end, proctime('w$) AS w$proctime], changelogMode=[I]): rowcount = 8.5E7, cumulative cost = {5.25E8 rows, 1.7355E10 cpu, 6.1E9 io, 5.44E9 network, 0.0 memory}
+      +- Exchange(distribution=[hash[user_no, userName, gender, age, city]], changelogMode=[I]): rowcount = 8.5E7, cumulative cost = {4.4E8 rows, 1.727E10 cpu, 6.1E9 io, 5.44E9 network, 0.0 memory}
+        +- Calc(select=[proctime, user_no, userName, gender, CAST(age) AS age, city], changelogMode=[I]): rowcount = 8.5E7, cumulative cost = {3.55E8 rows, 2.7E8 cpu, 6.1E9 io, 0.0 network, 0.0 memory}
+          +- Correlate(invocation=[user_udtf($cor2.log_id, $cor2.user_no)], correlate=[table(user_udtf($cor2.log_id,$cor2.user_no))], select=[log_id,event_time,user_no,real_ip,login_status,login_code,proctime,userName,gender,age,city], rowType=[RecordType(VARCHAR(2147483647) log_id, TIMESTAMP(3) event_time, VARCHAR(2147483647) user_no, VARCHAR(2147483647) real_ip, BOOLEAN login_status, VARCHAR(2147483647) login_code, TIMESTAMP_LTZ(3) *PROCTIME* proctime, VARCHAR(2147483647) userName, VARCHAR(2147483647) gender, INTEGER age, VARCHAR(2147483647) city)], joinType=[LEFT], changelogMode=[I]): rowcount = 8.5E7, cumulative cost = {2.7E8 rows, 2.7E8 cpu, 6.1E9 io, 0.0 network, 0.0 memory}
+            +- Calc(select=[log_id, event_time, user_no, real_ip, login_status, login_code, PROCTIME() AS proctime], where=[NOT(login_status)], changelogMode=[I]): rowcount = 8.5E7, cumulative cost = {1.85E8 rows, 1.85E8 cpu, 6.1E9 io, 0.0 network, 0.0 memory}
+              +- TableSourceScan(table=[[default_catalog, default_database, kafka_source_table]], fields=[log_id, event_time, user_no, real_ip, login_status, login_code], changelogMode=[I]): rowcount = 1.0E8, cumulative cost = {1.0E8 rows, 1.0E8 cpu, 6.1E9 io, 0.0 network, 0.0 memory}
+    
+  == Optimized Execution Plan ==
+  Sink(table=[default_catalog.default_database.kafka_sink_table], fields=[hop_start, hop_end, hop_proctime, user_no, user_name, gender, age, city, error_times])
+  +- Calc(select=[CAST(CAST(w$start)) AS hop_start, CAST(CAST(w$end)) AS hop_end, CAST(PROCTIME_MATERIALIZE(CAST(w$proctime))) AS hop_proctime, user_no, userName AS user_name, gender, age, city, error_times], where=[(error_times > 1)])
+  +- GroupWindowAggregate(groupBy=[user_no, userName, gender, age, city], window=[SlidingGroupWindow('w$, proctime, 600000, 60000)], properties=[w$start, w$end, w$proctime], select=[user_no, userName, gender, age, city, COUNT(*) AS error_times, start('w$) AS w$start, end('w$) AS w$end, proctime('w$) AS w$proctime])
+  +- Exchange(distribution=[hash[user_no, userName, gender, age, city]])
+  +- Calc(select=[proctime, user_no, userName, gender, CAST(age) AS age, city])
+  +- Correlate(invocation=[user_udtf($cor2.log_id, $cor2.user_no)], correlate=[table(user_udtf($cor2.log_id,$cor2.user_no))], select=[log_id,event_time,user_no,real_ip,login_status,login_code,proctime,userName,gender,age,city], rowType=[RecordType(VARCHAR(2147483647) log_id, TIMESTAMP(3) event_time, VARCHAR(2147483647) user_no, VARCHAR(2147483647) real_ip, BOOLEAN login_status, VARCHAR(2147483647) login_code, TIMESTAMP_LTZ(3) *PROCTIME* proctime, VARCHAR(2147483647) userName, VARCHAR(2147483647) gender, INTEGER age, VARCHAR(2147483647) city)], joinType=[LEFT])
+  +- Calc(select=[log_id, event_time, user_no, real_ip, login_status, login_code, PROCTIME() AS proctime], where=[NOT(login_status)])
+  +- TableSourceScan(table=[[default_catalog, default_database, kafka_source_table]], fields=[log_id, event_time, user_no, real_ip, login_status, login_code])
+  
+  == Physical Execution Plan ==
+  {
+    "nodes" : [ {
+      "id" : 10,
+      "type" : "Source: TableSourceScan(table=[[default_catalog, default_database, kafka_source_table]], fields=[log_id, event_time, user_no, real_ip, login_status, login_code])",
+      "pact" : "Data Source",
+      "contents" : "Source: TableSourceScan(table=[[default_catalog, default_database, kafka_source_table]], fields=[log_id, event_time, user_no, real_ip, login_status, login_code])",
+      "parallelism" : 1
+    }, {
+      "id" : 11,
+      "type" : "Calc(select=[log_id, event_time, user_no, real_ip, login_status, login_code, PROCTIME() AS proctime], where=[NOT(login_status)])",
+      "pact" : "Operator",
+      "contents" : "Calc(select=[log_id, event_time, user_no, real_ip, login_status, login_code, PROCTIME() AS proctime], where=[NOT(login_status)])",
+      "parallelism" : 1,
+      "predecessors" : [ {
+        "id" : 10,
+        "ship_strategy" : "FORWARD",
+        "side" : "second"
+      } ]
+    }, {
+      "id" : 12,
+      "type" : "Correlate(invocation=[user_udtf($cor2.log_id, $cor2.user_no)], correlate=[table(user_udtf($cor2.log_id,$cor2.user_no))], select=[log_id,event_time,user_no,real_ip,login_status,login_code,proctime,userName,gender,age,city], rowType=[RecordType(VARCHAR(2147483647) log_id, TIMESTAMP(3) event_time, VARCHAR(2147483647) user_no, VARCHAR(2147483647) real_ip, BOOLEAN login_status, VARCHAR(2147483647) login_code, TIMESTAMP_LTZ(3) *PROCTIME* proctime, VARCHAR(2147483647) userName, VARCHAR(2147483647) gender, INTEGER age, VARCHAR(2147483647) city)], joinType=[LEFT])",
+      "pact" : "Operator",
+      "contents" : "Correlate(invocation=[user_udtf($cor2.log_id, $cor2.user_no)], correlate=[table(user_udtf($cor2.log_id,$cor2.user_no))], select=[log_id,event_time,user_no,real_ip,login_status,login_code,proctime,userName,gender,age,city], rowType=[RecordType(VARCHAR(2147483647) log_id, TIMESTAMP(3) event_time, VARCHAR(2147483647) user_no, VARCHAR(2147483647) real_ip, BOOLEAN login_status, VARCHAR(2147483647) login_code, TIMESTAMP_LTZ(3) *PROCTIME* proctime, VARCHAR(2147483647) userName, VARCHAR(2147483647) gender, INTEGER age, VARCHAR(2147483647) city)], joinType=[LEFT])",
+      "parallelism" : 1,
+      "predecessors" : [ {
+        "id" : 11,
+        "ship_strategy" : "FORWARD",
+        "side" : "second"
+      } ]
+    }, {
+      "id" : 13,
+      "type" : "Calc(select=[proctime, user_no, userName, gender, CAST(age) AS age, city])",
+      "pact" : "Operator",
+      "contents" : "Calc(select=[proctime, user_no, userName, gender, CAST(age) AS age, city])",
+      "parallelism" : 1,
+      "predecessors" : [ {
+        "id" : 12,
+        "ship_strategy" : "FORWARD",
+        "side" : "second"
+      } ]
+    }, {
+      "id" : 15,
+      "type" : "GroupWindowAggregate(groupBy=[user_no, userName, gender, age, city], window=[SlidingGroupWindow('w$, proctime, 600000, 60000)], properties=[w$start, w$end, w$proctime], select=[user_no, userName, gender, age, city, COUNT(*) AS error_times, start('w$) AS w$start, end('w$) AS w$end, proctime('w$) AS w$proctime])",
+      "pact" : "Operator",
+      "contents" : "GroupWindowAggregate(groupBy=[user_no, userName, gender, age, city], window=[SlidingGroupWindow('w$, proctime, 600000, 60000)], properties=[w$start, w$end, w$proctime], select=[user_no, userName, gender, age, city, COUNT(*) AS error_times, start('w$) AS w$start, end('w$) AS w$end, proctime('w$) AS w$proctime])",
+      "parallelism" : 1,
+      "predecessors" : [ {
+        "id" : 13,
+        "ship_strategy" : "HASH",
+        "side" : "second"
+      } ]
+    }, {
+      "id" : 16,
+      "type" : "Calc(select=[CAST(CAST(w$start)) AS hop_start, CAST(CAST(w$end)) AS hop_end, CAST(PROCTIME_MATERIALIZE(CAST(w$proctime))) AS hop_proctime, user_no, userName AS user_name, gender, age, city, error_times], where=[(error_times > 1)])",
+      "pact" : "Operator",
+      "contents" : "Calc(select=[CAST(CAST(w$start)) AS hop_start, CAST(CAST(w$end)) AS hop_end, CAST(PROCTIME_MATERIALIZE(CAST(w$proctime))) AS hop_proctime, user_no, userName AS user_name, gender, age, city, error_times], where=[(error_times > 1)])",
+      "parallelism" : 1,
+      "predecessors" : [ {
+        "id" : 15,
+        "ship_strategy" : "FORWARD",
+        "side" : "second"
+      } ]
+    }, {
+      "id" : 17,
+      "type" : "Sink: Sink(table=[default_catalog.default_database.kafka_sink_table], fields=[hop_start, hop_end, hop_proctime, user_no, user_name, gender, age, city, error_times])",
+      "pact" : "Data Sink",
+      "contents" : "Sink: Sink(table=[default_catalog.default_database.kafka_sink_table], fields=[hop_start, hop_end, hop_proctime, user_no, user_name, gender, age, city, error_times])",
+      "parallelism" : 1,
+      "predecessors" : [ {
+        "id" : 16,
+        "ship_strategy" : "FORWARD",
+        "side" : "second"
+      } ]
+    } ]
+  }
